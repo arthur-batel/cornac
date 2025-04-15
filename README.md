@@ -1,281 +1,189 @@
-# Cornac
+PAC-Bayesian Theory for Overfitting Prevention and Early Stopping
 
-**Cornac** is a comparative framework for multimodal recommender systems. It focuses on making it **convenient** to work with models leveraging **auxiliary data** (e.g., item descriptive text and image, social network, etc). **Cornac** enables **fast** experiments and **straightforward** implementations of new models. It is **highly compatible** with existing machine learning libraries (e.g., TensorFlow, PyTorch).
+1. Overview of PAC Learning and Generalization Bounds
 
-*Cornac is one of the frameworks recommended by [ACM RecSys 2023](https://github.com/ACMRecSys/recsys-evaluation-frameworks) for the evaluation and reproducibility of recommendation algorithms.*
+Probably Approximately Correct (PAC) learning provides a theoretical framework to bound a model’s generalization error in terms of its training error and complexity. Informally, a PAC bound states that with high probability (say $1-\delta$), for any hypothesis $h$ in a given class $\mathcal{H}$, the true population error $L(h)$ is no more than the empirical (training) error $\hat{L}(h)$ plus a complexity term that grows with the model’s capacity and shrinks with the number of training samples $n$. For example, if $\mathcal{H}$ is a finite class of hypotheses, one classic result is: with probability at least $1-\delta$, for all $h\in \mathcal{H}$,
 
-### Quick Links
+$$
+L(h) ;\le; \hat{L}(h);+;\sqrt{\frac{\ln|\mathcal{H}| + \ln(1/\delta)}{2,n}} ,,
+$$
 
-[Website](https://cornac.preferred.ai/) |
-[Documentation](https://cornac.readthedocs.io/en/stable/index.html) |
-[Tutorials](tutorials#tutorials) |
-[Examples](https://github.com/PreferredAI/cornac/tree/master/examples#cornac-examples-directory) |
-[Models](#models) |
-[Datasets](./cornac/datasets/README.md#datasets) |
-[Paper](http://www.jmlr.org/papers/volume21/19-805/19-805.pdf) |
-[Preferred.AI](https://preferred.ai/)
+meaning a larger hypothesis space $|\mathcal{H}|$ yields a looser (larger) bound on generalization error ￼. Intuitively, a more complex model class can fit the training data in many ways, so we “pay” a penalty for that flexibility. Indeed, as the size or complexity of $\mathcal{H}$ grows, the bound’s second term grows, potentially dominating the training error term ￼. In extreme cases like a “memorization” model with effectively infinite $\mathcal{H}$, the bound suggests $L(h)$ could be as high as 1 (i.e. no guarantee at all) even if $\hat{L}(h)=0$ ￼. This explains why an over-expressive model can overfit: unless constrained by lots of data or other means, the theory only assures a trivial error bound.
 
-[![.github/workflows/python-package.yml](https://github.com/PreferredAI/cornac/actions/workflows/python-package.yml/badge.svg)](https://github.com/PreferredAI/cornac/actions/workflows/python-package.yml)
-[![CircleCI](https://img.shields.io/circleci/project/github/PreferredAI/cornac/master.svg?logo=circleci)](https://circleci.com/gh/PreferredAI/cornac)
-[![AppVeyor](https://ci.appveyor.com/api/projects/status/0yq4td1xg4kkhdwu?svg=true)](https://ci.appveyor.com/project/tqtg/cornac)
-[![Codecov](https://img.shields.io/codecov/c/github/PreferredAI/cornac/master.svg?logo=codecov)](https://codecov.io/gh/PreferredAI/cornac)
-[![Docs](https://img.shields.io/readthedocs/cornac/latest.svg)](https://cornac.readthedocs.io/en/stable)
-<br />
-[![Release](https://img.shields.io/github/release-pre/PreferredAI/cornac.svg)](https://github.com/PreferredAI/cornac/releases)
-[![PyPI](https://img.shields.io/pypi/v/cornac.svg)](https://pypi.org/project/cornac/)
-[![Conda](https://img.shields.io/conda/vn/conda-forge/cornac.svg)](https://anaconda.org/conda-forge/cornac)
-[![Conda Recipe](https://img.shields.io/badge/recipe-cornac-green.svg)](https://github.com/conda-forge/cornac-feedstock)
-[![Downloads](https://static.pepy.tech/personalized-badge/cornac?period=month&units=international_system&left_color=grey&right_color=orange&left_text=downloads/month)](https://pepy.tech/project/cornac)
-<br />
-[![Python](https://img.shields.io/pypi/pyversions/cornac.svg)](https://cornac.preferred.ai/)
-[![Conda Platforms](https://img.shields.io/conda/pn/conda-forge/cornac.svg)](https://anaconda.org/conda-forge/cornac)
-[![License](https://img.shields.io/badge/License-Apache%202.0-yellow.svg)](https://opensource.org/licenses/Apache-2.0)
+For infinite hypothesis classes, one uses capacity measures like VC-dimension, Rademacher complexity, or other complexity metrics instead of $\ln|\mathcal{H}|$. For instance, a bound based on VC-dimension $d$ (for binary classification) is, roughly: with probability $1-\delta$, $L(h)\le \hat{L}(h) + \sqrt{\frac{2d\ln(2n/d) + 2\ln(1/\delta)}{n}}$, showing dependence on $d$ (which grows with model complexity) and $n$. In general, the PAC framework ties generalization gap $|L(h)-\hat{L}(h)|$ to the complexity of $h$’s class. It highlights the fundamental trade-off: to achieve low true error with limited data, one must control model complexity (capacity) to avoid overfitting.
 
+Key insight: PAC guarantees are worst-case over the class $\mathcal{H}$, so they tend to be conservative. They nonetheless motivate strategies like restricting $\mathcal{H}$, regularization, or early stopping to control complexity. When data are few, these bounds become especially relevant: with $n$ small, the complexity term is large, so one must severely limit effective model capacity or training time to keep the bound small (and thus ensure $L(h)$ is close to $\hat{L}(h)$). This is precisely the intuition behind using PAC-type bounds to prevent overfitting in low-data regimes.
 
-## Installation
+2. The PAC-Bayesian Framework and Formulas
 
-Currently, we are supporting Python 3. There are several ways to install Cornac:
+PAC-Bayesian bounds are a refinement of PAC theory that considers a distribution over hypotheses. Instead of analyzing a single fixed classifier, PAC-Bayes considers a posterior distribution $Q$ on hypotheses (after seeing data) relative to a fixed prior distribution $P$ (chosen independently of data). PAC-Bayesian bounds often yield tighter, data-dependent guarantees for complex hypothesis classes by exploiting the idea that a learned model might lie in a relatively small “effective” portion of $\mathcal{H}$ (as measured by divergence from the prior), rather than pessimistically accounting for the entire class.
 
-- **From PyPI (recommended):**
-  ```bash
-  pip3 install cornac
-  ```
+A typical PAC-Bayesian generalization bound (for bounded loss in $[0,C]$) is as follows: for any prior distribution $P$ on hypotheses and for any $\delta\in(0,1)$, with probability at least $1-\delta$ over the random draw of the training set, every posterior distribution $Q$ on $\mathcal{H}$ satisfies
 
-- **From Anaconda:**
-  ```bash
-  conda install cornac -c conda-forge
-  ```
+\[
+\mathbb{E}{h\sim Q}[L(h)] \;\le\; \mathbb{E}{h\sim Q}[\hat{L}(h)] \;+\; \frac{\lambda C^2}{8n} \;+\; \frac{\KL(Q \,\|\, P) + \ln(1/\delta)}{\lambda}\,,
+\]
 
-- **From the GitHub source (for latest updates):**
-  ```bash
-  pip3 install Cython numpy scipy
-  pip3 install git+https://github.com/PreferredAI/cornac.git
-  ```
+for all choices of $\lambda>0$ ￼. This bound might look complicated, but each piece has a clear meaning:
+	•	$\mathbb{E}_{h\sim Q}[L(h)]$ is the true risk of the randomized classifier that first samples $h\sim Q$ then predicts with $h$. (Many PAC-Bayes bounds apply to these Gibbs predictors, and one can derive corollaries for the risk of the single best $h$ as well.)
+	•	$\mathbb{E}_{h\sim Q}[\hat{L}(h)]$ is the training (empirical) risk of the classifier distributed according to $Q$. This is typically low if $Q$ is concentrated on hypotheses that fit the training data well.
+	•	$\KL(Q|P)$ is the Kullback–Leibler divergence between $Q$ and the prior $P$. This term acts as a complexity penalty: it is small when the learned distribution $Q$ stays “close” to the prior $P$. Intuitively, if one can explain the data with hypotheses that were a priori likely (according to $P$), then the effective complexity is low. But if $Q$ has moved far from $P$ (e.g. choosing very specific parameters that were unlikely under the prior), then $\KL(Q|P)$ is large, and the bound loosens.
+	•	$\lambda>0$ is a free parameter in the bound that can be optimized to tighten it. It appears in a trade-off: the term $\frac{\KL(Q|P)+\ln(1/\delta)}{\lambda}$ grows smaller with larger $\lambda$, but at the cost of the $\frac{\lambda C^2}{8n}$ term which grows. This is a standard technique in PAC-Bayes bounds (sometimes called Catoni’s formulation): one can often optimize $\lambda$ analytically or by intuition. Essentially, $\lambda$ tunes how much weight we give to the complexity term versus the empirical error term in the bound.
 
-**Note:**
+This bound simultaneously holds for all posteriors $Q$ (one can think of it as a kind of capacity measure over the space of posteriors). To apply it, one typically chooses a prior $P$ that represents our “belief” or baseline before seeing data – often $P$ is chosen to favor simpler models (for example, a Gaussian centered at zero weights for a neural network, encoding the belief that small weights are expected). The posterior $Q$ might be taken as a point mass on the trained hypothesis $h$ (yielding a bound on that specific model’s risk), or a distribution concentrated around the learned parameters.
 
-Additional dependencies required by models are listed [here](README.md#Models).
+Special case (Occam’s razor bound): If we take $Q$ to be a point mass on a single hypothesis $h$ (so $\mathbb{E}{h\sim Q}[L(h)] = L(h)$ and $\mathbb{E}{h\sim Q}[\hat{L}(h)] = \hat{L}(h)$), the PAC-Bayes bound reduces to
 
-Some algorithm implementations use `OpenMP` to support multi-threading. For Mac OS users, in order to run those algorithms efficiently, you might need to install `gcc` from Homebrew to have an OpenMP compiler:
-```bash
-brew install gcc | brew link gcc
-```
+L(h) \;\le\; \hat{L}(h) + \frac{\lambda C^2}{8n} + \frac{\ln\!\frac{1}{P(h)} + \ln(1/\delta)}{\lambda}\,.
 
-## Getting started: your first Cornac experiment
+Here $\ln\frac{1}{P(h)}$ can be interpreted as the description length (in nats) of hypothesis $h$ under prior $P$. If we choose a prior that assigns shorter codes (higher prior probability) to “simpler” hypotheses, this becomes an Occam’s bound: hypotheses that can be described briefly (low complexity) have tighter generalization bounds ￼ ￼. For example, if $P$ is a zero-mean Gaussian with small variance $\sigma^2$, then $\ln\frac{1}{P(h)}$ is proportional to $|h|^2$ (the squared norm of the weights), so the bound penalizes hypotheses with large weight norms. In that case, the bound qualitatively recovers the intuition behind weight decay regularization: small-weight networks are considered a priori simpler and thus generalize better.
 
-![](assets/flow.jpg)
-<p align="center"><i>Flow of an Experiment in Cornac</i></p>
+Interpreting the PAC-Bayes bound: The term $\KL(Q|P)$ is crucial. It does not explicitly depend on the raw size of $\mathcal{H}$ (which for a neural net could be astronomically large or infinite), but rather on how far the learned hypothesis is from our prior belief. This data-dependent complexity can be much smaller than uniform complexity measures, enabling PAC-Bayes to yield non-vacuous bounds even for very rich models, provided $P$ is well-chosen. In fact, PAC-Bayesian bounds have seen renewed interest because they can sometimes explain generalization where classical uniform bounds (like VC dimension) are hopelessly loose ￼. For instance, researchers have successfully applied PAC-Bayes bounds to deep neural networks by carefully choosing a prior and optimizing the posterior, obtaining meaningful (if still numerically large) generalization guarantees ￼.
 
-```python
-import cornac
-from cornac.eval_methods import RatioSplit
-from cornac.models import MF, PMF, BPR
-from cornac.metrics import MAE, RMSE, Precision, Recall, NDCG, AUC, MAP
+PAC-Bayes bounds often come in various flavors (bounds on the gap, bounds using a refined divergence measure, etc.), but the essential form is always empirical performance + complexity penalty. The above formula can be rearranged by solving for $\mathbb{E}_{h\sim Q}[L(h)]$: one common rearrangement yields a high-probability bound on the generalization gap:
 
-# load the built-in MovieLens 100K and split the data based on ratio
-ml_100k = cornac.datasets.movielens.load_feedback()
-rs = RatioSplit(data=ml_100k, test_size=0.2, rating_threshold=4.0, seed=123)
+\[
+\mathbb{E}{h\sim Q}[L(h)] - \mathbb{E}{h\sim Q}[\hat{L}(h)] \;\le\; \sqrt{\frac{\KL(Q\|P) + \ln(1/\delta)}{2n}} \,,
+\]
 
-# initialize models, here we are comparing: Biased MF, PMF, and BPR
-mf = MF(k=10, max_iter=25, learning_rate=0.01, lambda_reg=0.02, use_bias=True, seed=123)
-pmf = PMF(k=10, max_iter=100, learning_rate=0.001, lambda_reg=0.001, seed=123)
-bpr = BPR(k=10, max_iter=200, learning_rate=0.001, lambda_reg=0.01, seed=123)
-models = [mf, pmf, bpr]
+for 0-1 losses or using a Hoeffding-type assumption ￼. This shows explicitly that if $Q$ is chosen such that $\KL(Q|P)$ grows slower than linearly with $n$, the gap will vanish as $n$ increases.
 
-# define metrics to evaluate the models
-metrics = [MAE(), RMSE(), Precision(k=10), Recall(k=10), NDCG(k=10), AUC(), MAP()]
+3. Using PAC (and PAC-Bayes) Bounds to Tune Models and Prevent Overfitting
 
-# put it together in an experiment, voilà!
-cornac.Experiment(eval_method=rs, models=models, metrics=metrics, user_based=True).run()
-```
+The practical upshot of PAC and PAC-Bayesian theory is that it informs regularization and model selection. The bounds suggest a very general strategy: minimize an upper-bound on true error rather than just training error. By doing so, we implicitly trade off fit vs. complexity in a principled way. Concretely:
+	•	Structural Risk Minimization (SRM): In classical learning theory, one partitions hypotheses into nested classes of increasing complexity ($\mathcal{H}_1 \subset \mathcal{H}_2 \subset \cdots$). A PAC bound that depends on class complexity then suggests choosing the smallest index $i$ such that $\mathcal{H}_i$ contains a hypothesis with low training error. This balances the empirical risk and capacity term. For example, one might choose the degree of a polynomial model by finding the smallest degree that fits the data well – higher degree (more complex) would reduce training error further but incurs a larger complexity penalty.
+	•	Regularization via PAC-Bayes: The PAC-Bayesian bound in the previous section can be used as an objective function for training. Notice that for a fixed prior $P$ and fixed $\delta$, the bound suggests minimizing
+$$\mathbb{E}_{h\sim Q}[\hat{L}(h)] + \frac{\KL(Q|P)}{\lambda}$$
+(ignoring constants like $\lambda C^2/(8n)$ which don’t depend on $Q$). If we restrict $Q$ to be a point mass at a hypothesis $h$, this reduces to minimizing
+$$\hat{L}(h) + \frac{\ln \frac{1}{P(h)}}{\lambda},$$
+which is exactly an empirical loss plus a regularization term derived from the prior. For instance, using the Gaussian prior example, this becomes $\hat{L}(h) + \tfrac{1}{\lambda}|h|^2/(2\sigma^2)$, an $L^2$ weight decay term. In other words, PAC-Bayesian training naturally leads to regularization: one trains the model to minimize a combination of training loss and model complexity (measured as divergence from the prior) ￼ ￼. This is closely related to Bayesian regularization – in fact, the Gibbs posterior $Q^*(h) \propto P(h)\exp(-\lambda n \hat{L}(h))$ minimizes the bound, which corresponds to a Bayesian posterior with $P$ as prior and $\lambda$ controlling the effective temperature. This link is not just aesthetic: it means techniques like Bayesian neural networks or variational inference (which penalize KL divergence from a prior while fitting the data) can be seen as approximately minimizing a PAC-Bayes bound. Indeed, it’s known that the objective of variational Bayes can be interpreted as minimizing a description length (a compression-based view) ￼, which aligns with PAC-Bayes’ goal of balancing fit and complexity.
+	•	Practical implementations: Dziugaite and Roy (2017) famously demonstrated a practical use of PAC-Bayes for neural networks: they directly optimized a PAC-Bayes bound (via stochastic gradient descent in a space of distributions over weights) on MNIST, yielding non-vacuous generalization guarantees ￼. Their approach involved introducing noise to the weights (so as to learn a stochastic neural network, i.e., a distribution $Q$ over weights) and adjusting both the mean and variance of that distribution to minimize the bound. The result was a certificate on the network’s performance on unseen data. While this kind of training is computationally heavy and the bounds are still loose in absolute terms, it demonstrates the preventive power of PAC-Bayesian theory: by explicitly accounting for complexity in the objective, one can obtain models that provably won’t overfit (as much).
 
-**Output:**
+In summary, PAC and PAC-Bayes theory guide us to fine-tune model parameters or architectures by explicitly penalizing complexity. Instead of relying purely on a validation set to indicate overfitting, one can add a theoretically motivated regularization term. For example, PAC-Bayes suggests penalizing the KL divergence from a prior – which in practice could mean: keep weights near zero or near some reference model, limit the norms, encourage flatness in the loss landscape, etc., all of which have been empirically linked to better generalization. These principles are especially useful with few data points, where the risk of overfitting is high: a strong prior or regularizer (hinted by PAC-bound terms) can compensate for data scarcity.
 
-|                          |    MAE |   RMSE |    AUC |     MAP | NDCG@10 | Precision@10 | Recall@10 |  Train (s) | Test (s) |
-| ------------------------ | -----: | -----: | -----: | ------: | ------: | -----------: | --------: | ---------: | -------: |
-| [MF](cornac/models/mf)   | 0.7430 | 0.8998 | 0.7445 |  0.0548 |  0.0761 |       0.0675 |    0.0463 |       0.13 |     1.57 |
-| [PMF](cornac/models/pmf) | 0.7534 | 0.9138 | 0.7744 |  0.0671 |  0.0969 |       0.0813 |    0.0639 |       2.18 |     1.64 |
-| [BPR](cornac/models/bpr) |    N/A |    N/A | 0.8695 |  0.1042 |  0.1500 |       0.1110 |    0.1195 |       3.74 |     1.49 |
+4. Early Stopping as a PAC-Guided Criterion (Without a Validation Set)
 
+Early stopping is a regularization technique where we halt training before the model has completely minimized training error, in hopes of achieving lower test error. Traditionally, one uses a held-out validation set to decide when to stop (e.g. stop when validation error begins to increase). The question here is: can we determine a stopping point without a validation set, using PAC(-Bayesian) bounds as the guide?
 
-## Model serving
+The PAC perspective indeed suggests a way to do this. During training (say, each epoch or iteration $t$), we can think of the current model $h_t$ as one hypothesis among an implicit sequence ${h_1, h_2, \dots}$ being considered by the learning algorithm. As training progresses, training error $\hat{L}(h_t)$ typically decreases (the model fits the data better and better), but at the same time the model parameters usually grow more specialized to the training data, implying complexity measures (capacity) increase. For example, $h_t$ might be moving farther from the prior $P$ we assumed, so $\KL(\delta_{h_t}|P)$ (if using PAC-Bayes) is increasing; or simply the effective degrees of freedom the model is using are increasing as it fits more patterns in the data (including noise). Early stopping works because there is often an optimal trade-off point where the decrease in training error is just offset by the increase in complexity, yielding the lowest possible bound on true error. Past that point, further training might drive $\hat{L}(h)$ down a bit more, but the complexity penalty blows up, causing the bound on $L(h)$ to worsen. In other words, there is a point where any further fitting gains are outweighed by overfitting.
 
-Here, we provide a simple way to serve a Cornac model by launching a standalone web service with [Flask](https://github.com/pallets/flask). It is very handy for testing or creating a demo application. First, we install the dependency:
-```bash
-$ pip3 install Flask
-```
-Supposed that we want to serve the trained BPR model from previous example, we need to save it:
-```python
-bpr.save("save_dir", save_trainset=True)
-```
-After that, the model can be deployed easily by running Cornac serving app as follows:
-```bash
-$ FLASK_APP='cornac.serving.app' \
-  MODEL_PATH='save_dir/BPR' \
-  MODEL_CLASS='cornac.models.BPR' \
-  flask run --host localhost --port 8080
+Using a PAC-Bayes bound as a concrete example, one could at each epoch compute an estimate of the bound for the current model. Choose a prior $P$ (for instance, a distribution centered at the initial parameters or a simple reference model). At epoch $t$, treat the current weights $w_t$ as yielding a degenerate posterior $Q_t = \delta_{w_t}$. Plug these into the PAC-Bayes bound formula to get an upper bound $B(t)$ on the true risk $L(h_t)$. That is:
+	•	Compute $\hat{L}(h_t)$ on the training set.
+	•	Compute the complexity term, e.g. $C(t) = \frac{1}{\lambda}\big(\KL(\delta_{w_t}|P) + \ln\frac{1}{\delta}\big) + \frac{\lambda C^2}{8n}$ (using the earlier bound form). In simpler terms, this could be something like $C(t) \propto \frac{\ln(1/P(h_t))}{n}$.
+	•	Then $B(t) = \hat{L}(h_t) + C(t)$ is a PAC-Bayesian upper bound on $L(h_t)$ with high confidence.
 
-# Running on http://localhost:8080
-```
-Here we go, our model service is now ready. Let's get `top-5` item recommendations for the user `"63"`:
-```bash
-$ curl -X GET "http://localhost:8080/recommend?uid=63&k=5&remove_seen=false"
+By monitoring $B(t)$ as training progresses, we can choose the stopping time $\hat{t}$ that minimizes this bound. The model $h_{\hat{t}}$ is the one that achieves the best theoretical guarantee. Stopping at this point is justified without a validation set – we are using the training data itself but through the lens of a regularized bound.
 
-# Response: {"recommendations": ["50", "181", "100", "258", "286"], "query": {"uid": "63", "k": 5, "remove_seen": false}}
-```
-If we want to remove seen items during training, we need to provide `TRAIN_SET` which has been saved with the model earlier, when starting the serving app. We can also leverage [WSGI](https://flask.palletsprojects.com/en/3.0.x/deploying/) server for model deployment in production. Please refer to [this](https://cornac.readthedocs.io/en/stable/user/iamadeveloper.html#running-an-api-service) guide for more details.
+In essence, this procedure is performing a kind of built-in cross-validation using theory instead of held-out data. It is similar to minimizing an information criterion (like AIC/BIC, which we discuss later) or the MDL (Minimum Description Length) score during training. The difference is PAC-Bayes gives a rigorous probabilistic guarantee on performance for the chosen stopping point (e.g. “with 95% confidence, the true error is at most $B(\hat{t})$”).
 
-## Model A/B testing
+It’s worth noting that computing the exact PAC-Bayes bound for a deep network can be non-trivial in real time (since $\KL(Q|P)$ might be high-dimensional). In practice, one might rely on proxies that correlate with the bound. For example, if the prior is a Gaussian with variance $\sigma^2$, then $\KL(\delta_{w_t}|P) = \frac{|w_t|^2}{2\sigma^2} + \text{const}$, so the complexity term is essentially proportional to the squared weight norm. In this case, monitoring the weight norms or other capacity measures during training can serve as a heuristic for complexity growth. Another proxy could be the noise resilience of the model: PAC-Bayes bounds are sometimes tighter for flat minima (broad optima) than sharp ones, so one could detect when the local minimum is getting sharp (e.g. high Hessian eigenvalues) as a sign of overfitting. In fact, some researchers have proposed criteria based on the gradients and curvature: for example, Mahsereci et al. (2017) introduced an early stopping rule using fast-to-compute local gradient statistics (essentially monitoring the alignment of successive gradient steps) to decide when the model starts overfitting, thus removing the need for a validation set ￼.
 
-[Cornac-AB](https://github.com/preferredAI/cornac-ab) is an extension of Cornac using the Cornac Serving API. Easily create and manage A/B testing experiments to further understand your model performance with online users.
+To summarize, PAC-bound theory can indeed inspire an early stopping rule without a validation set:
+	•	One computes a generalization bound estimator at each step (which uses only training data and prior knowledge).
+	•	Stop when this estimator starts to increase (or equivalently, when it is minimized).
 
-| User Interaction Solution | Recommendations Dashboard | Feedback Dashboard |
-|:------------------------:|:------------------------:|:------------------:|
-| <img src="assets/demo.png" alt="demo" width="250"/> | <img src="assets/recommendation-dashboard.png" alt="recommendations" width="250"/> | <img src="assets/feedback-dashboard.png" alt="feedback" width="250"/> |
+This gives a stopping point that approximately minimizes an upper bound on true error, rather than the training error itself. The result is a model that balances bias and variance according to the PAC criteria.
 
-## Efficient retrieval with ANN search
+5. A Concrete Early-Stopping Algorithm Based on PAC-Bounds
 
-One important aspect of deploying recommender model is efficient retrieval via Approximate Nearest Neighbor (ANN) search in vector space. Cornac integrates several vector similarity search frameworks for the ease of deployment. [This example](tutorials/ann_hnswlib.ipynb) demonstrates how ANN search will work seamlessly with any recommender models supporting it (e.g., matrix factorization).
+Bringing the above ideas together, here’s an outline for an early stopping algorithm using PAC(-Bayesian) bounds as the criterion:
 
-| Supported Framework | Cornac Wrapper | Example |
-| :-----------------: | :------------: | :-----: |
-| [spotify/annoy](https://github.com/spotify/annoy) | [AnnoyANN](cornac/models/ann/recom_ann_annoy.py) | [quick-start](examples/ann_example.py), [deep-dive](examples/ann_all.ipynb)
-| [meta/faiss](https://github.com/facebookresearch/faiss) | [FaissANN](cornac/models/ann/recom_ann_faiss.py) | [quick-start](examples/ann_example.py), [deep-dive](examples/ann_all.ipynb)
-| [nmslib/hnswlib](https://github.com/nmslib/hnswlib) | [HNSWLibANN](cornac/models/ann/recom_ann_hnswlib.py) | [quick-start](examples/ann_example.py), [hnsw-lib](tutorials/ann_hnswlib.ipynb), [deep-dive](examples/ann_all.ipynb)
-| [google/scann](https://github.com/google-research/google-research/tree/master/scann) | [ScaNNANN](cornac/models/ann/recom_ann_scann.py) | [quick-start](examples/ann_example.py), [deep-dive](examples/ann_all.ipynb)
+Preparation: Choose a PAC-Bayes prior $P$ over model parameters (or hypotheses). This could be a multivariate normal distribution centered at the initial weights (capturing a notion of “simple model” as one near the start), or something problem-specific. Fix a desired confidence level $1-\delta$ (e.g. 0.95).
 
+Algorithm:
+	1.	Initialize model parameters $w_0$ (randomly or pre-trained). Compute initial training loss $\hat{L}(h_0)$.
+	2.	Initialize an array to record the bound values $B(t)$ for each epoch $t$.
+	3.	For epoch $t = 1,2,\ldots,T_{\max}$ (some large maximum epoch):
+	1.	Perform one epoch (or a certain number of iterations) of training on the training set, updating parameters to $w_t$.
+	2.	Compute the current training loss $\hat{L}(h_t)$.
+	3.	Compute the complexity term based on the prior and current parameters. For example, if using the bound form from Section 2, choose a $\lambda$ (one might use the theoretically optimal $\lambda = \sqrt{\frac{8n[\KL(\delta_{w_t}|P)+\ln(1/\delta)]}{C^2}}$ that equalizes the two terms, or simply treat $\lambda$ as a constant for simplicity) and calculate
+$$C(t) = \frac{\lambda C^2}{8n} + \frac{\KL(\delta_{w_t}|P) + \ln(1/\delta)}{\lambda},. $$
+This requires evaluating $\KL(\delta_{w_t}|P)$, which for many priors has a closed form (e.g., for a Gaussian prior, $\KL$ is quadratic in $w_t$).
+	4.	Compute the bound $B(t) = \hat{L}(h_t) + C(t)$. This $B(t)$ is an upper bound (with confidence $1-\delta$) on the true error $L(h_t)$.
+	5.	If $B(t)$ is greater than $B(t-1)$ (the bound got worse) for a certain number of successive epochs or if a plateau is detected, then stop training at epoch $t_{\text{stop}} = t-1$.  In other words, detect the point where the bound $B(t)$ stops improving. One could apply a patience criterion (e.g., stop if $B(t)$ has not improved for 5 epochs) to make it robust to noise.
+	6.	Otherwise, continue to the next epoch.
+	4.	Output the model $h_{t_{\text{stop}}}$ corresponding to the minimal observed bound $B(t)$. Optionally, output the bound value itself as an estimate of the generalization error.
 
-## Models
+Explanation: This procedure explicitly balances the training loss with a complexity penalty at each step. Early in training, $\hat{L}(h_t)$ is large but $\KL(\delta_{w_t}|P)$ is small (the model hasn’t moved far from the prior/simple initialization). As $t$ increases, $\hat{L}(h_t)$ decreases and $\KL(\delta_{w_t}|P)$ increases. The bound $B(t)$ initially falls, reflecting improved fit without too much complexity cost. Past a certain point, if $\KL$ grows significantly (meaning the model is becoming too complex relative to what $P$ expected), $B(t)$ can start rising. Stopping at the minimum of $B(t)$ aims to capture the optimal trade-off. This $h_{t_{\text{stop}}}$ is the hypothesis for which we have the best theoretical guarantee.
 
-The table below lists the recommendation models/algorithms featured in Cornac. Examples are provided as quick-start showcasing an easy to run script, or as deep-dive explaining the math and intuition behind each model. Why don't you join us to lengthen the list?
+Guarantee: By construction, with probability $1-\delta$ (over the random draw of the training set), we have $L(h_{t_{\text{stop}}}) \le B(t_{\text{stop}})$. In other words, this procedure not only picks a model but also certifies its performance bound. This is something a usual validation-based early stopping cannot directly guarantee – it only provides an empirical estimate of performance. PAC-based stopping gives a worst-case assurance.
 
-| Year | Model and Paper | Type | Environment | Example |
-| :--: | --------------- | :--: | :---------: | :-----: |
-| 2024 | [Comparative Aspects and Opinions Ranking for Recommendation Explanations (Companion)](cornac/models/companion), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.companion.recom_companion), [paper](https://lthoang.com/assets/publications/mlj24.pdf) | Hybrid / Sentiment / Explainable | CPU | [quick-start](examples/companion_example.py)
-|      | [Hypergraphs with Attention on Reviews (HypAR)](cornac/models/hypar), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.hypar.recom_hypar), [paper](https://doi.org/10.1007/978-3-031-56027-9_14)| Hybrid / Sentiment / Explainable | [requirements](cornac/models/hypar/requirements_cu116.txt), CPU / GPU | [quick-start](https://github.com/PreferredAI/HypAR)
-| 2022 | [Disentangled Multimodal Representation Learning for Recommendation (DMRL)](cornac/models/dmrl), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.dmrl.recom_dmrl), [paper](https://arxiv.org/pdf/2203.05406.pdf) | Content-Based / Text & Image | [requirements](cornac/models/dmrl/requirements.txt), CPU / GPU | [quick-start](examples/dmrl_example.py)
-| 2021 | [Bilateral Variational Autoencoder for Collaborative Filtering (BiVAECF)](cornac/models/bivaecf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.bivaecf.recom_bivaecf), [paper](https://dl.acm.org/doi/pdf/10.1145/3437963.3441759) | Collaborative Filtering / Content-Based | [requirements](cornac/models/bivaecf/requirements.txt), CPU / GPU | [quick-start](https://github.com/PreferredAI/bi-vae), [deep-dive](https://github.com/recommenders-team/recommenders/blob/main/examples/02_model_collaborative_filtering/cornac_bivae_deep_dive.ipynb)
-|      | [Causal Inference for Visual Debiasing in Visually-Aware Recommendation (CausalRec)](cornac/models/causalrec), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.causalrec.recom_causalrec), [paper](https://arxiv.org/abs/2107.02390) | Content-Based / Image | [requirements](cornac/models/causalrec/requirements.txt), CPU / GPU | [quick-start](examples/causalrec_clothing.py)
-|      | [Explainable Recommendation with Comparative Constraints on Product Aspects (ComparER)](cornac/models/comparer), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.comparer.recom_comparer_sub), [paper](https://dl.acm.org/doi/pdf/10.1145/3437963.3441754) | Explainable | CPU | [quick-start](https://github.com/PreferredAI/ComparER)
-| 2020 | [Adversarial Multimedia Recommendation (AMR)](cornac/models/amr), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.amr.recom_amr), [paper](https://ieeexplore.ieee.org/document/8618394) | Content-Based / Image | [requirements](cornac/models/amr/requirements.txt), CPU / GPU | [quick-start](examples/amr_clothing.py)
-|      | [Hybrid Deep Representation Learning of Ratings and Reviews (HRDR)](cornac/models/hrdr), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.hrdr.recom_hrdr), [paper](https://www.sciencedirect.com/science/article/abs/pii/S0925231219313207) | Content-Based / Text | [requirements](cornac/models/hrdr/requirements.txt), CPU / GPU | [quick-start](examples/hrdr_example.py)
-|      | [LightGCN: Simplifying and Powering Graph Convolution Network](cornac/models/lightgcn), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.lightgcn.recom_lightgcn), [paper](https://arxiv.org/pdf/2002.02126.pdf) | Collaborative Filtering | [requirements](cornac/models/lightgcn/requirements.txt), CPU / GPU | [quick-start](examples/lightgcn_example.py)
-|      | [Predicting Temporal Sets with Deep Neural Networks (DNNTSP)](cornac/models/dnntsp), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.dnntsp.recom_dnntsp), [paper](https://arxiv.org/pdf/2006.11483.pdf) | Next-Basket | [requirements](cornac/models/dnntsp/requirements.txt), CPU / GPU | [quick-start](examples/dnntsp_tafeng.py)
-|      | [Recency Aware Collaborative Filtering (UPCF)](cornac/models/upcf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.upcf.recom_upcf), [paper](https://dl.acm.org/doi/abs/10.1145/3340631.3394850) | Next-Basket | [requirements](cornac/models/upcf/requirements.txt), CPU | [quick-start](examples/upcf_tafeng.py)
-|      | [Temporal-Item-Frequency-based User-KNN (TIFUKNN)](cornac/models/tifuknn), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.tifuknn.recom_tifuknn), [paper](https://arxiv.org/pdf/2006.00556.pdf) | Next-Basket | CPU | [quick-start](examples/tifuknn_tafeng.py)
-|      | [Variational Autoencoder for Top-N Recommendations (RecVAE)](cornac/models/recvae), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.recvae.recom_recvae), [paper](https://doi.org/10.1145/3336191.3371831) | Collaborative Filtering | [requirements](cornac/models/recvae/requirements.txt), CPU / GPU | [quick-start](examples/recvae_example.py)
-| 2019 | [Correlation-Sensitive Next-Basket Recommendation (Beacon)](cornac/models/beacon), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#correlation-sensitive-next-basket-recommendation-beacon), [paper](https://www.ijcai.org/proceedings/2019/0389.pdf) | Next-Basket | [requirements](cornac/models/beacon/requirements.txt), CPU / GPU | [quick-start](examples/beacon_tafeng.py)
-|      | [Embarrassingly Shallow Autoencoders for Sparse Data (EASEᴿ)](cornac/models/ease), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.ease.recom_ease), [paper](https://arxiv.org/pdf/1905.03375.pdf) | Collaborative Filtering | CPU | [quick-start](examples/ease_movielens.py)
-|      | [Neural Graph Collaborative Filtering (NGCF)](cornac/models/ngcf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.ngcf.recom_ngcf), [paper](https://arxiv.org/pdf/1905.08108.pdf) | Collaborative Filtering | [requirements](cornac/models/ngcf/requirements.txt), CPU / GPU | [quick-start](examples/ngcf_example.py)
-| 2018 | [Collaborative Context Poisson Factorization (C2PF)](cornac/models/c2pf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.c2pf.recom_c2pf), [paper](https://www.ijcai.org/proceedings/2018/0370.pdf) | Content-Based / Graph | CPU | [quick-start](examples/c2pf_example.py)
-|      | [Graph Convolutional Matrix Completion (GCMC)](cornac/models/gcmc), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.gcmc.recom_gcmc), [paper](https://www.kdd.org/kdd2018/files/deep-learning-day/DLDay18_paper_32.pdf) | Collaborative Filtering | [requirements](cornac/models/gcmc/requirements.txt), CPU / GPU | [quick-start](examples/gcmc_example.py)
-|      | [Multi-Task Explainable Recommendation (MTER)](cornac/models/mter), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.mter.recom_mter), [paper](https://arxiv.org/pdf/1806.03568.pdf) | Explainable | CPU | [quick-start](examples/mter_example.py), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/07_explanations.ipynb)
-|      | [Neural Attention Rating Regression with Review-level Explanations (NARRE)](cornac/models/narre), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.narre.recom_narre), [paper](http://www.thuir.cn/group/~YQLiu/publications/WWW2018_CC.pdf) | Explainable / Content-Based | [requirements](cornac/models/narre/requirements.txt), CPU / GPU | [quick-start](examples/narre_example.py)
-|      | [Probabilistic Collaborative Representation Learning (PCRL)](cornac/models/pcrl), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.pcrl.recom_pcrl), [paper](http://www.hadylauw.com/publications/uai18.pdf) | Content-Based / Graph | [requirements](cornac/models/pcrl/requirements.txt), CPU / GPU | [quick-start](examples/pcrl_example.py)
-|      | [Variational Autoencoder for Collaborative Filtering (VAECF)](cornac/models/vaecf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.vaecf.recom_vaecf), [paper](https://arxiv.org/pdf/1802.05814.pdf) | Collaborative Filtering | [requirements](cornac/models/vaecf/requirements.txt), CPU / GPU | [quick-start](examples/vaecf_citeulike.py), [param-search](tutorials/param_search_vaecf.ipynb), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/09_deep_learning.ipynb)
-| 2017 | [Collaborative Variational Autoencoder (CVAE)](cornac/models/cvae), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.cvae.recom_cvae), [paper](http://eelxpeng.github.io/assets/paper/Collaborative_Variational_Autoencoder.pdf) | Content-Based / Text | [requirements](cornac/models/cvae/requirements.txt), CPU / GPU | [quick-start](examples/cvae_example.py)
-|      | [Conditional Variational Autoencoder for Collaborative Filtering (CVAECF)](cornac/models/cvaecf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.cvaecf.recom_cvaecf), [paper](https://dl.acm.org/doi/10.1145/3132847.3132972) | Content-Based / Text | [requirements](cornac/models/cvaecf/requirements.txt), CPU / GPU | [quick-start](examples/cvaecf_filmtrust.py)
-|      | [Generalized Matrix Factorization (GMF)](cornac/models/ncf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.ncf.recom_gmf), [paper](https://arxiv.org/pdf/1708.05031.pdf) | Collaborative Filtering | [requirements](cornac/models/ncf/requirements.txt), CPU / GPU | [quick-start](examples/ncf_example.py), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/09_deep_learning.ipynb)
-|      | [Indexable Bayesian Personalized Ranking (IBPR)](cornac/models/ibpr), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.ibpr.recom_ibpr), [paper](http://www.hadylauw.com/publications/cikm17a.pdf) | Collaborative Filtering | [requirements](cornac/models/ibpr/requirements.txt), CPU / GPU | [quick-start](examples/ibpr_example.py), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/08_retrieval.ipynb)
-|      | [Matrix Co-Factorization (MCF)](cornac/models/mcf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.mcf.recom_mcf), [paper](https://dsail.kaist.ac.kr/files/WWW17.pdf) | Content-Based / Graph | CPU | [quick-start](examples/mcf_office.py), [cross-modality](https://github.com/lgabs/cornac/blob/luan/describe-gpu-supported-models-readme/tutorials/text_to_graph.ipynb)
-|      | [Multi-Layer Perceptron (MLP)](cornac/models/ncf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.ncf.recom_mlp), [paper](https://arxiv.org/pdf/1708.05031.pdf) | Collaborative Filtering | [requirements](cornac/models/ncf/requirements.txt), CPU / GPU | [quick-start](examples/ncf_example.py), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/09_deep_learning.ipynb)
-|      | [Neural Matrix Factorization (NeuMF) / Neural Collaborative Filtering (NCF)](cornac/models/ncf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.ncf.recom_neumf), [paper](https://arxiv.org/pdf/1708.05031.pdf) | Collaborative Filtering | [requirements](cornac/models/ncf/requirements.txt), CPU / GPU | [quick-start](examples/ncf_example.py), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/09_deep_learning.ipynb)
-|      | [Online Indexable Bayesian Personalized Ranking (Online IBPR)](cornac/models/online_ibpr), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.online_ibpr.recom_online_ibpr), [paper](http://www.hadylauw.com/publications/cikm17a.pdf) | Collaborative Filtering | [requirements](cornac/models/online_ibpr/requirements.txt), CPU / GPU | [quick-start](examples/ibpr_example.py), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/08_retrieval.ipynb)
-|      | [Visual Matrix Factorization (VMF)](cornac/models/vmf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.vmf.recom_vmf), [paper](https://dsail.kaist.ac.kr/files/WWW17.pdf) | Content-Based / Image | [requirements](cornac/models/vmf/requirements.txt), CPU / GPU | [quick-start](examples/vmf_clothing.py)
-| 2016 | [Collaborative Deep Ranking (CDR)](cornac/models/cdr), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.cdr.recom_cdr), [paper](http://inpluslab.com/chenliang/homepagefiles/paper/hao-pakdd2016.pdf) | Content-Based / Text | [requirements](cornac/models/cdr/requirements.txt), CPU / GPU | [quick-start](examples/cdr_example.py)
-|      | [Collaborative Ordinal Embedding (COE)](cornac/models/coe), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.coe.recom_coe), [paper](http://www.hadylauw.com/publications/sdm16.pdf) | Collaborative Filtering | [requirements](cornac/models/coe/requirements.txt), CPU / GPU |
-|      | [Convolutional Matrix Factorization (ConvMF)](cornac/models/conv_mf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.conv_mf.recom_convmf), [paper](http://uclab.khu.ac.kr/resources/publication/C_351.pdf) | Content-Based / Text | [requirements](cornac/models/conv_mf/requirements.txt), CPU / GPU | [quick-start](examples/conv_mf_example.py), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/09_deep_learning.ipynb)
-|      | [Learning to Rank Features for Recommendation over Multiple Categories (LRPPM)](cornac/models/lrppm), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#learn-to-rank-user-preferences-based-on-phrase-level-sentiment-analysis-across-multiple-categories-lrppm), [paper](https://www.yongfeng.me/attach/sigir16-chen.pdf) | Explainable | CPU | [quick-start](examples/lrppm_example.py)
-|      | [Session-based Recommendations With Recurrent Neural Networks (GRU4Rec)](cornac/models/gru4rec), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.gru4rec.recom_gru4rec), [paper](https://arxiv.org/pdf/1511.06939.pdf) | Next-Item | [requirements](cornac/models/gru4rec/requirements.txt), CPU / GPU | [quick-start](examples/gru4rec_yoochoose.py)
-|      | [Spherical K-means (SKM)](cornac/models/skm), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.skm.recom_skmeans), [paper](https://www.sciencedirect.com/science/article/pii/S092523121501509X) | Collaborative Filtering | CPU | [quick-start](examples/skm_movielens.py)
-|      | [Visual Bayesian Personalized Ranking (VBPR)](cornac/models/vbpr), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.vbpr.recom_vbpr), [paper](https://arxiv.org/pdf/1510.01784.pdf) | Content-Based / Image | [requirements](cornac/models/vbpr/requirements.txt), CPU / GPU | [quick-start](examples/vbpr_tradesy.py), [cross-modality](tutorials/vbpr_text.ipynb), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/05_multimodality.ipynb)
-| 2015 | [Collaborative Deep Learning (CDL)](cornac/models/cdl), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.cdl.recom_cdl), [paper](https://arxiv.org/pdf/1409.2944.pdf) | Content-Based / Text | [requirements](cornac/models/cdl/requirements.txt), CPU / GPU | [quick-start](examples/cdl_example.py), [deep-dive](https://github.com/lgabs/cornac/blob/luan/describe-gpu-supported-models-readme/tutorials/working_with_auxiliary_data.md)
-|      | [Hierarchical Poisson Factorization (HPF)](cornac/models/hpf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.hpf.recom_hpf), [paper](http://jakehofman.com/inprint/poisson_recs.pdf) | Collaborative Filtering | CPU | [quick-start](examples/hpf_movielens.py)
-|      | [TriRank: Review-aware Explainable Recommendation by Modeling Aspects](cornac/models/trirank), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.trirank.recom_trirank), [paper](https://wing.comp.nus.edu.sg/wp-content/uploads/Publications/PDF/TriRank-%20Review-aware%20Explainable%20Recommendation%20by%20Modeling%20Aspects.pdf) | Explainable | CPU | [quick-start](examples/trirank_example.py)
-| 2014 | [Explicit Factor Model (EFM)](cornac/models/efm), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.efm.recom_efm), [paper](https://www.yongfeng.me/attach/efm-zhang.pdf) | Explainable | CPU | [quick-start](examples/efm_example.py), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/07_explanations.ipynb)
-|      | [Social Bayesian Personalized Ranking (SBPR)](cornac/models/sbpr), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#social-bayesian-personalized-ranking-sbpr), [paper](https://cseweb.ucsd.edu/~jmcauley/pdfs/cikm14.pdf) | Content-Based / Social | CPU | [quick-start](examples/sbpr_epinions.py)
-| 2013 | [Hidden Factors and Hidden Topics (HFT)](cornac/models/hft), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.hft.recom_hft), [paper](https://cs.stanford.edu/people/jure/pubs/reviews-recsys13.pdf) | Content-Based / Text | CPU | [quick-start](examples/hft_example.py)
-| 2012 | [Weighted Bayesian Personalized Ranking (WBPR)](cornac/models/bpr), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#weighted-bayesian-personalized-ranking-wbpr), [paper](http://proceedings.mlr.press/v18/gantner12a/gantner12a.pdf) | Collaborative Filtering | CPU | [quick-start](examples/bpr_netflix.py)
-| 2011 | [Collaborative Topic Regression (CTR)](cornac/models/ctr), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.ctr.recom_ctr), [paper](http://www.cs.columbia.edu/~blei/papers/WangBlei2011.pdf) | Content-Based / Text | CPU | [quick-start](examples/ctr_example_citeulike.py), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/05_multimodality.ipynb)
-| Earlier | [Baseline Only](cornac/models/baseline_only), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#baseline-only), [paper](http://courses.ischool.berkeley.edu/i290-dm/s11/SECURE/a1-koren.pdf) | Baseline | CPU | [quick-start](examples/svd_example.py)
-|      | [Bayesian Personalized Ranking (BPR)](cornac/models/bpr), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#bayesian-personalized-ranking-bpr) [paper](https://arxiv.org/ftp/arxiv/papers/1205/1205.2618.pdf) | Collaborative Filtering | CPU | [quick-start](examples/bpr_netflix.py), [deep-dive](https://github.com/recommenders-team/recommenders/blob/main/examples/02_model_collaborative_filtering/cornac_bpr_deep_dive.ipynb)
-|      | [Factorization Machines (FM)](cornac/models/fm), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#factorization-machines-fm), [paper](https://www.csie.ntu.edu.tw/~b97053/paper/Factorization%20Machines%20with%20libFM.pdf) | Collaborative Filtering / Content-Based | Linux, CPU | [quick-start](examples/fm_example.py), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/06_contextual_awareness.ipynb)
-|      | [Global Average (GlobalAvg)](cornac/models/global_avg), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.global_avg.recom_global_avg), [paper](https://datajobs.com/data-science-repo/Recommender-Systems-[Netflix].pdf) | Baseline | CPU | [quick-start](examples/biased_mf.py)
-|      | [Global Personalized Top Frequent (GPTop)](cornac/models/gp_top), [paper](https://dl.acm.org/doi/pdf/10.1145/3587153) | Next-Basket | CPU | [quick-start](examples/gp_top_tafeng.py)
-|      | [Item K-Nearest-Neighbors (ItemKNN)](cornac/models/knn), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#item-k-nearest-neighbors-itemknn), [paper](https://dl.acm.org/doi/pdf/10.1145/371920.372071) | Neighborhood-Based | CPU | [quick-start](examples/knn_movielens.py), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/02_neighborhood.ipynb)
-|      | [Matrix Factorization (MF)](cornac/models/mf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.mf.recom_mf), [paper](https://datajobs.com/data-science-repo/Recommender-Systems-[Netflix].pdf) | Collaborative Filtering | CPU / GPU | [quick-start](examples/biased_mf.py), [pre-split-data](examples/given_data.py), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/03_matrix_factorization.ipynb)
-|      | [Maximum Margin Matrix Factorization (MMMF)](cornac/models/mmmf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.mmmf.recom_mmmf), [paper](https://link.springer.com/content/pdf/10.1007/s10994-008-5073-7.pdf) | Collaborative Filtering | CPU | [quick-start](examples/mmmf_exp.py)
-|      | [Most Popular (MostPop)](cornac/models/most_pop), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.most_pop.recom_most_pop), [paper](https://arxiv.org/ftp/arxiv/papers/1205/1205.2618.pdf) | Baseline | CPU | [quick-start](examples/bpr_netflix.py)
-|      | [Non-negative Matrix Factorization (NMF)](cornac/models/nmf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.nmf.recom_nmf), [paper](http://papers.nips.cc/paper/1861-algorithms-for-non-negative-matrix-factorization.pdf) | Collaborative Filtering | CPU | [quick-start](examples/nmf_example.py), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/03_matrix_factorization.ipynb)
-|      | [Probabilistic Matrix Factorization (PMF)](cornac/models/pmf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.pmf.recom_pmf), [paper](https://papers.nips.cc/paper/3208-probabilistic-matrix-factorization.pdf) | Collaborative Filtering | CPU | [quick-start](examples/pmf_ratio.py)
-|      | [Session Popular (SPop)](cornac/models/spop), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.spop.recom_spop), [paper](https://arxiv.org/pdf/1511.06939.pdf) | Next-Item / Baseline | CPU | [quick-start](examples/spop_yoochoose.py)
-|      | [Singular Value Decomposition (SVD)](cornac/models/svd), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.svd.recom_svd), [paper](https://people.engr.tamu.edu/huangrh/Spring16/papers_course/matrix_factorization.pdf) | Collaborative Filtering | CPU | [quick-start](examples/svd_example.py), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/03_matrix_factorization.ipynb)
-|      | [Social Recommendation using PMF (SoRec)](cornac/models/sorec), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.sorec.recom_sorec), [paper](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.304.2464&rep=rep1&type=pdf) | Content-Based / Social | CPU | [quick-start](examples/sorec_filmtrust.py), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/05_multimodality.ipynb)
-|      | [User K-Nearest-Neighbors (UserKNN)](cornac/models/knn), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#user-k-nearest-neighbors-userknn), [paper](https://arxiv.org/pdf/1301.7363.pdf) | Neighborhood-Based | CPU | [quick-start](examples/knn_movielens.py), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/02_neighborhood.ipynb)
-|      | [Weighted Matrix Factorization (WMF)](cornac/models/wmf), [docs](https://cornac.readthedocs.io/en/stable/api_ref/models.html#module-cornac.models.wmf.recom_wmf), [paper](http://yifanhu.net/PUB/cf.pdf) | Collaborative Filtering | [requirements](cornac/models/wmf/requirements.txt), CPU / GPU | [quick-start](examples/wmf_example.py), [deep-dive](https://github.com/PreferredAI/tutorials/blob/master/recommender-systems/04_implicit_feedback.ipynb)
+Of course, this algorithm’s performance depends on the tightness of the bound in practice. PAC-Bayes bounds, while theoretically valid, can be loose if the prior is not well-aligned or if $n$ is very small. In small-data regimes, however, any guidance is valuable, and a PAC-based criterion might be more stable than using a tiny validation set (which would be very noisy).
 
+There is also a computational consideration: calculating $\KL(\delta_{w_t}|P)$ or other complexity measures each epoch is usually negligible compared to the training cost, but if one uses a more complex bound (e.g. one requiring computing a large Hessian or doing a mini-optimization to find a distribution $Q_t$ around $w_t$), it could slow things down. In practice, one might simplify the bound or update the complexity term less frequently (e.g. every few epochs) to reduce overhead.
 
-## Resources
+In practice, this approach is still experimental – researchers have begun exploring it, but it’s not yet a standard deep learning practice. Nonetheless, it is a promising idea for scenarios where data is too scarce to afford a validation split.
 
-- [Cornac Examples](examples)
-- [Cornac Tutorials](tutorials)
-- [RecSys Tutorials by Preferred.AI](https://github.com/PreferredAI/tutorials/tree/master/recommender-systems)
-- [Running Cornac Model with Microsoft Recommenders (BPR)](https://github.com/recommenders-team/recommenders/blob/main/examples/02_model_collaborative_filtering/cornac_bpr_deep_dive.ipynb), [(BiVAE)](https://github.com/recommenders-team/recommenders/blob/main/examples/02_model_collaborative_filtering/cornac_bivae_deep_dive.ipynb)
-- [Multimodal RecSys Tutorial at TheWebConf/WWW 2023](https://github.com/PreferredAI/tutorials/blob/master/multimodal-www23/00_slides.pdf), [earlier version at RecSys 2021](https://github.com/PreferredAI/tutorials/blob/master/multimodal-recsys/slides.pdf)
+6. Alternative Theoretical Approaches for Early Stopping without Validation
 
+PAC-Bayesian bounds are one approach to theoretically monitor generalization. There are other frameworks and theories with similar goals, which we briefly outline below. Each provides a different lens on why early stopping works and how to formalize it without needing a validation set:
 
-## Contributing
+6.1 Information-Theoretic Generalization Bounds
 
-This project welcomes contributions and suggestions. Before contributing, please see our [contribution guidelines](https://cornac.readthedocs.io/en/stable/developer/index.html).
+Information theory provides tools to relate a learning algorithm’s stability or generalization to the mutual information between the training data and the learned model. The intuition is that if the trained model $W$ does not “entangle” too much information from the training set $S$, then it cannot have overfit $S$. Formally, one can bound the expected generalization gap by the mutual information $I(W; S)$ ￼ ￼. One result (Russo and Zou, 2016; Xu and Raginsky, 2017) states that for a learning algorithm that produces random model $W$ from data $S$:
 
-## Citation
+\big|\mathbb{E}[L(W) - \hat{L}(W)]\big| \;\le\; \sqrt{\frac{I(W;S)}{2n}} \,,
 
-If you use Cornac in a scientific publication, we would appreciate citations to the following papers:
+under appropriate conditions (e.g. bounded or subgaussian losses). This is an average bound, but high-probability versions also exist ￼ ￼. The takeaway is: the more information the model memorizes from the training set, the larger the potential generalization gap. Early stopping can be interpreted as a way to limit $I(W;S)$ – the longer we train (especially with very flexible models), the more information from $S$ gets inscribed into $W$. At the extreme of overfitting, $W$ may encode entire training examples (maximal information). Early stopping cuts off training before this happens.
 
-<details>
-  <summary><a href="http://jmlr.org/papers/v21/19-805.html">Cornac: A Comparative Framework for Multimodal Recommender Systems</a>, Salah <i>et al.</i>, Journal of Machine Learning Research, 21(95):1–5, 2020.</summary>
+In practice, directly calculating $I(W;S)$ is difficult for complex models. However, this theory inspires practical regularization: for instance, adding noise during training reduces mutual information (since the learning algorithm forgets some specifics of $S$). Indeed, information-theoretic analyses suggest adding noise or explicitly penalizing information can control generalization ￼ ￼. One example is differentially private training (which noise-injects gradients): it inherently limits information each step and thus provides generalization guarantees.
 
-  ```
-  @article{salah2020cornac,
-    title={Cornac: A Comparative Framework for Multimodal Recommender Systems},
-    author={Salah, Aghiles and Truong, Quoc-Tuan and Lauw, Hady W},
-    journal={Journal of Machine Learning Research},
-    volume={21},
-    number={95},
-    pages={1--5},
-    year={2020}
-  }
-  ```
-</details>
+For early stopping specifically, one could imagine tracking a proxy for information content. One crude proxy is simply the training time or number of training bits consumed. Another proxy is the model’s compression of the data: if the model’s description of the data becomes very terse (meaning the model has explained a lot of the data), it might be using a lot of info from $S$. There are advanced measures like conditional mutual information per iteration that researchers sometimes analyze (each training step’s contribution to mutual information). While these aren’t easy to plug into a simple criterion for stopping, the theory qualitatively supports the idea: stop training before the model “soaks up” too much information from the data (beyond what is needed to generalize).
 
-<details>
-  <summary><a href="https://ieeexplore.ieee.org/abstract/document/9354572">Exploring Cross-Modality Utilization in Recommender Systems</a>, Truong <i>et al.</i>, IEEE Internet Computing, 25(4):50–57, 2021.</summary>
+In summary, information-theoretic bounds guarantee that algorithms with limited information uptake generalize well ￼. Early stopping limits information uptake by truncating the training process. This perspective doesn’t give a single formula to compute at runtime, but it underpins methods like noise regularization and suggests that if one monitors information gain per epoch (if that were available), one should stop when it starts spiking.
 
-  ```
-  @article{truong2021exploring,
-    title={Exploring Cross-Modality Utilization in Recommender Systems},
-    author={Truong, Quoc-Tuan and Salah, Aghiles and Tran, Thanh-Binh and Guo, Jingyao and Lauw, Hady W},
-    journal={IEEE Internet Computing},
-    year={2021},
-    publisher={IEEE}
-  }
-  ```
-</details>
+6.2 Algorithmic Stability Theory
 
-<details>
-  <summary><a href="http://jmlr.org/papers/v21/19-805.html">Multi-Modal Recommender Systems: Hands-On Exploration</a>, Truong <i>et al.</i>, ACM Conference on Recommender Systems, 2021.</summary>
+Another way to ensure generalization without a validation set is to rely on uniform stability: an algorithm is stable if small changes in the input (training set) cause only small changes in the learned model’s predictions. A uniformly stable learning algorithm has a provable generalization guarantee: essentially, if replacing one training example with another changes the output hypothesis only by a little (in terms of loss), then the training loss will be close to the test loss ￼. Early stopping contributes to stability in many algorithms.
 
-  ```
-  @inproceedings{truong2021multi,
-    title={Multi-modal recommender systems: Hands-on exploration},
-    author={Truong, Quoc-Tuan and Salah, Aghiles and Lauw, Hady},
-    booktitle={Fifteenth ACM Conference on Recommender Systems},
-    pages={834--837},
-    year={2021}
-  }
-  ```
-</details>
+For example, stochastic gradient descent (SGD) is not infinitely stable if run to convergence on an overparameterized model – it may eventually fit one data point in a highly specific way. But if SGD is stopped early (after relatively few iterations), it tends to be more stable. Hardt, Recht, and Singer (2016) showed that SGD with a small number of steps is uniformly stable, and thus its generalization error remains small ￼. In fact, they found that if you run SGD for too long, stability can degrade, whereas a faster stop yields better generalization (hence their paper title “Train faster, generalize better” ￼). The bound they provide is of the order of $O(T/n)$ for the generalization gap in some scenarios (where $T$ is number of iterations) – so the gap grows with more training iterations, linearly in that simple bound. Stopping early (small $T$) gives a tighter guarantee.
 
-## License
+Using stability for stopping: One could attempt to monitor some notion of stability during training. Directly measuring stability means asking: if I perturb my dataset slightly (e.g. leave one point out), how much does my model change? Doing this exactly would require retraining or having some analytical handle, which is not trivial on the fly. However, there are heuristics related to this: for instance, monitoring the difference between training and a form of “leave-one-out” error (some efficient approximations exist for certain models). If the model is starting to fit idiosyncrasies, the leave-one-out error will diverge from training error. Another idea is to look at the norm of gradients: a very unstable (overfit) model might have large gradients w.r.t. single points but that might be more relevant to adversarial training. In any case, the theory tells us that long training runs can jeopardize stability.
 
-[Apache License 2.0](LICENSE)
+So a simple rule of thumb from stability theory: do not run more training epochs than necessary. This is admittedly vague, but one can incorporate prior knowledge: e.g., in linear regression with $n$ points and $p$ parameters, after about $n$ iterations the algorithm may have effectively used each sample once – beyond that, it might start to “remember” noise. In deep learning, it’s observed that often a few epochs are sufficient to get near-maximal generalization; training to zero training loss can require many more epochs and often coincides with overfitting (especially if $n$ is small).
+
+6.3 Minimum Description Length (MDL) and Complexity Penalization
+
+The Minimum Description Length principle is another framework closely related to PAC-Bayes (in fact, PAC-Bayes can be derived in part from coding arguments). MDL states that the best hypothesis is the one that compresses the data the most – i.e., the shortest code length for “hypothesis + data given hypothesis.” In practical terms, one tries to minimize:
+
+L_{\text{model}} + L_{\text{data}|\text{model}},
+
+where $L_{\text{model}}$ is the number of bits needed to describe the model (complexity) and $L_{\text{data}|\text{model}}$ is the number of bits to encode the training data given the model (which relates to training error or likelihood). Early stopping can be seen through MDL: initially, as the model improves, $L_{\text{data}|\text{model}}$ (the negative log-likelihood of the data under the model) decreases – the model explains the data more concisely. However, the model itself is getting more complex (effectively longer description, as it fine-tunes to quirks of data). There will be a point where the total description length $L_{\text{total}} = L_{\text{model}} + L_{\text{data}|\text{model}}$ is minimal. Past that, adding more complexity (more training) makes the model longer to describe without sufficiently shortening the data description – implying overfit (model is fitting noise, which doesn’t actually help compress the data).
+
+An MDL-based stopping rule would be: stop when $L_{\text{total}}$ starts increasing. One can approximate this in various ways:
+	•	$L_{\text{model}}$ could be measured by some function of the model parameters (for a neural net, one could literally try to compress the weights, or use a proxy like the number of bits needed to store them at a certain precision).
+	•	$L_{\text{data}|\text{model}}$ is related to the training error or likelihood. For example, if using a squared error loss, $-\ln P(\text{data}|h)$ corresponds to the sum of squared errors (plus constants). If using cross-entropy, it corresponds to the training cross-entropy.
+
+This is very akin to AIC/BIC in statistics:
+	•	AIC (Akaike Information Criterion) $= -2\ln \mathcal{L}(h) + 2k$ (where $k$ is number of parameters) is essentially a first-order MDL approximation that balances fit vs. model complexity.
+	•	BIC (Bayesian Information Criterion) $= -2\ln \mathcal{L}(h) + (\ln n),k$ penalizes complexity more strongly for larger $n$.
+
+These criteria can be computed on the training set (using $-\ln \mathcal{L}$ as a stand-in for $L_{\text{data}|\text{model}}$) without a validation set. One could track, say, AIC during training and stop when it stops decreasing. In linear regression and some simple models, this is equivalent to methods like Mallows’ $C_p$ or Stein’s unbiased risk estimator (SURE), which estimate test error from training error plus a penalty for model degrees of freedom.
+
+For neural networks or complex models, explicit MDL computation is challenging, but not impossible. Some recent research has tried to directly train deep nets to minimize description length ￼. For example, one can use sophisticated coding schemes to measure how many bits are needed to encode the model and data, and then differentiate that (via variational inference techniques) to train the model ￼. Interestingly, such approaches often yield models that are smaller or simpler than those chosen by validation loss, confirming that MDL is a harsher judge of complexity ￼. In one study, the networks chosen by minimum codelength had lower test accuracy than the usual cross-validated ones ￼ – essentially, MDL was over-regularizing relative to what a validation set would do, perhaps due to being very cautious about overfitting. This illustrates a general point: methods like PAC-Bayes or MDL that give theoretical guarantees can sometimes be conservative (they might stop early or choose smaller models than strictly necessary for best test performance) ￼. The trade-off is that those models come with guarantees, whereas the cross-validated model (while often performing better) could in theory overfit the validation or lack a formal guarantee.
+
+In practice, using MDL for early stopping might involve:
+	•	computing an approximate description length each epoch (e.g., compress the weights via gzip or count non-zero weights for a rough measure, plus calculate $-\ln P(\text{data}|h_t)$),
+	•	then stopping at minimal description length.
+
+MDL is very aligned with PAC-Bayes: the term $\KL(Q|P)$ is essentially the code-length difference between the hypothesis under prior vs posterior. In fact, one can show PAC-Bayes bounds are equivalent to an MDL bound on generalization ￼. So it’s no surprise they suggest a similar procedure.
+
+6.4 Other Approaches and Remarks
+	•	Ensemble-based approaches: Interestingly, rather than early-stopping a single model, one can train an ensemble of models along the trajectory of training (snapshot ensembles). A recent PAC-Bayesian study argued that instead of picking a single early-stopped model, one can safely include multiple checkpoints in an ensemble by assigning weights to them that minimize a PAC-Bayes bound ￼. This yields a predictor that potentially generalizes better than any single model, without requiring a validation set to pick one, and it comes with a certificate (PAC-Bayes bound) on its performance ￼. This is a more advanced use of PAC theory to avoid overfitting: rather than making a hard choice of when to stop, it combines models in a weighted majority with theoretical guarantees (a form of majority vote bound).
+	•	Cross-validation without a proper validation set: Techniques like leave-one-out (LOO) cross-validation or jackknife can estimate generalization from training data alone. In some cases, one can derive analytic or approximate formulas for LOO error. For example, linear models have the Hat matrix that gives an exact relation between training residuals and LOO residuals. One could stop when the estimated LOO error is minimal. This isn’t a PAC bound, but it’s another way to get an unbiased estimate of test error without a dedicated set. However, LOO can be high-variance and computationally costly for complex models, so PAC-Bayes or information bounds might be preferable for a theory-backed guarantee.
+	•	Stability-based heuristics: As a proxy for stability, one could monitor the difference between training loss and a noisy perturbed version of training loss. If the model starts fitting noise, then injecting a bit of noise in the input or labels will degrade performance significantly. A stable model (not overfitting) would be relatively robust to such perturbations. So, one might periodically evaluate the model on a noisy version of the training set; when the gap between normal training loss and noisy-training loss starts to widen, it indicates the model is fitting peculiar details of the data (overfitting). This idea is related to adversarial training and data augmentation as well.
+
+In conclusion, PAC-Bayesian theory offers a compelling approach to early stopping without a validation set by providing a quantifiable trade-off between fit and complexity. Alongside, information-theoretic and stability frameworks reinforce the idea that limiting the training process (either by stopping early or by injecting randomness) can prevent overfitting in a theoretically principled way. Minimum Description Length ties it all together by asserting the best stopping point is when the model plus data description is shortest – essentially when further learning would start encoding noise. All these approaches strive for the same goal: achieve the simplest model that explains the data. Early stopping is a practical embodiment of this principle, and using the above theories, one can devise stopping criteria that come with stronger guarantees than a simple validation loss check. Each approach has pros and cons – PAC-Bayes gives a probabilistic guarantee but may be conservative, information theory gives conceptual clarity but is hard to measure directly, stability gives elegant bounds but requires some smoothness conditions, and MDL is powerful but computationally intensive to calculate for deep nets. A researcher with strong ML background can blend these insights to design an early stopping rule fitting their specific problem, with confidence that it rests on solid theoretical ground.
+
+Sources:
+	•	Classical PAC generalization bound intuition ￼
+	•	Role of hypothesis complexity in generalization ￼ ￼
+	•	PAC-Bayes bound (McAllester/Catoni style) formula and interpretation ￼ ￼
+	•	Recent interest in PAC-Bayes for neural nets ￼
+	•	Early stopping without validation via gradient statistics ￼
+	•	Stability of SGD and generalization vs. iterations ￼
+	•	Information-theoretic view: generalization vs mutual information ￼ ￼
+	•	PAC-Bayes/Info theory inspired regularization (noise, relative-entropy) ￼
+	•	MDL principle and variational Bayes = code length minimization ￼ ￼
+	•	MDL applied to deep nets: chooses smaller models than cross-validation ￼ (illustrating conservativeness)
+	•	PAC-Bayes ensemble weighting vs early stopping ￼
